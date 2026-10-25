@@ -3,9 +3,9 @@
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
+from pytorchexample.logging_utils import LoggingFedAvg
 
-from pytorchexample.task import Net, load_centralized_dataset, test
+from pytorchexample.task import Net, load_centralized_dataset, test_metrics
 
 # Create ServerApp
 app = ServerApp()
@@ -24,8 +24,14 @@ def main(grid: Grid, context: Context) -> None:
     global_model = Net()
     arrays = ArrayRecord(global_model.state_dict())
 
-    # Initialize FedAvg strategy
-    strategy = FedAvg(fraction_evaluate=fraction_evaluate)
+    # Initialize FedAvg strategy with concise custom logs
+    strategy = LoggingFedAvg(
+        fraction_evaluate=fraction_evaluate,
+        total_rounds=num_rounds,
+    )
+
+    print("\nStarting federated training")
+    print(f"Rounds: {num_rounds}  |  Evaluation fraction: {fraction_evaluate:.0%}")
 
     # Start strategy, run FedAvg for `num_rounds`
     result = strategy.start(
@@ -37,14 +43,15 @@ def main(grid: Grid, context: Context) -> None:
     )
 
     if context.run_config["save-model"]:
-        # Save final model to disk
-        print("\nSaving final model to disk...")
         state_dict = result.arrays.to_torch_state_dict()
         torch.save(state_dict, "final_model.pt")
+        print("\nFinal model saved: final_model.pt")
+
+    print("\nFederated training finished.")
 
 
 def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
-    """Evaluate model on central data."""
+    """Evaluate the global model and print a compact metric summary."""
 
     # Load the model and initialize it with the received weights
     model = Net()
@@ -52,11 +59,38 @@ def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    # Load entire test set
+    # Load the centralized dataset
     test_dataloader = load_centralized_dataset()
 
-    # Evaluate the global model on the test set
-    test_loss, test_acc = test(model, test_dataloader, device)
+    # Evaluate the global model centrally
+    metrics = test_metrics(model, test_dataloader, device)
+    phase = "BASELINE (BEFORE TRAINING)" if server_round == 0 else "GLOBAL EVALUATION"
 
-    # Return the evaluation metrics
-    return MetricRecord({"accuracy": test_acc, "loss": test_loss})
+    print(f"\n{'-' * 78}")
+    if server_round == 0:
+        print(f"{phase}  |  INITIAL MODEL")
+    else:
+        print(f"ROUND {server_round:02d}  |  {phase}")
+
+    print("-" * 78)
+    print(
+        f"Loss: {metrics['eval_loss']:.4f}  |  "
+        f"Accuracy: {metrics['eval_acc']:.2%}  |  "
+        f"Macro precision: {metrics['eval_precision']:.4f}  |  "
+        f"Macro recall: {metrics['eval_recall']:.4f}  |  "
+        f"Macro-F1: {metrics['eval_f1']:.4f}"
+    )
+
+    # Keep all metrics in the MetricRecord for Flower's result object.
+    return MetricRecord(
+        {
+            "accuracy": metrics["eval_acc"],
+            "loss": metrics["eval_loss"],
+            "precision": metrics["eval_precision"],
+            "recall": metrics["eval_recall"],
+            "f1": metrics["eval_f1"],
+            "confidence": metrics["eval_confidence"],
+            "correct_confidence": metrics["eval_correct_confidence"],
+            "wrong_confidence": metrics["eval_wrong_confidence"],
+        }
+    )

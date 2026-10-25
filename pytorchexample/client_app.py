@@ -5,7 +5,7 @@ from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 
 from pytorchexample.task import Net, load_data
-from pytorchexample.task import test as test_fn
+from pytorchexample.task import test_metrics as test_metrics_fn
 from pytorchexample.task import train as train_fn
 
 # Flower ClientApp
@@ -64,19 +64,13 @@ def evaluate(msg: Message, context: Context):
     batch_size = context.run_config["batch-size"]
     _, valloader = load_data(partition_id, num_partitions, batch_size)
 
-    # Call the evaluation function
-    eval_loss, eval_acc = test_fn(
-        model,
-        valloader,
-        device,
-    )
+    # Evaluate the global model on the client's validation set.
+    metrics = test_metrics_fn(model, valloader, device)
+
+    # Include the number of validation examples for weighted aggregation.
+    metrics["num-examples"] = len(valloader.dataset)
 
     # Construct and return reply Message
-    metrics = {
-        "eval_loss": eval_loss,
-        "eval_acc": eval_acc,
-        "num-examples": len(valloader.dataset),
-    }
     metric_record = MetricRecord(metrics)
     content = RecordDict({"metrics": metric_record})
     return Message(content=content, reply_to=msg)

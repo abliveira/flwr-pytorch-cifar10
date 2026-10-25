@@ -92,18 +92,62 @@ def train(net, trainloader, epochs, lr, device):
     return avg_trainloss
 
 
-def test(net, testloader, device):
-    """Validate the model on the test set."""
+def test_metrics(net, testloader, device):
+    """Evaluate the model and return classification and confidence metrics."""
     net.to(device)
+    net.eval()
     criterion = torch.nn.CrossEntropyLoss()
     correct, loss = 0, 0.0
+    total_examples = 0
+    confidence_sum = 0.0
+    correct_confidence_sum = 0.0
+    wrong_confidence_sum = 0.0
+    # Accumulate class counts for macro-averaged metrics.
+    true_positive = torch.zeros(10, dtype=torch.long, device=device)
+    predicted_counts = torch.zeros(10, dtype=torch.long, device=device)
+    actual_counts = torch.zeros(10, dtype=torch.long, device=device)
     with torch.no_grad():
         for batch in testloader:
             images = batch["img"].to(device)
             labels = batch["label"].to(device)
             outputs = net(images)
+            probabilities = torch.softmax(outputs, dim=1)
+            confidence, predictions = probabilities.max(dim=1)
+            matches = predictions == labels
             loss += criterion(outputs, labels).item()
-            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+            correct += matches.sum().item()
+            total_examples += labels.size(0)
+            # Track average confidence for all, correct, and incorrect predictions.
+            confidence_sum += confidence.sum().item()
+            correct_confidence_sum += confidence[matches].sum().item()
+            wrong_confidence_sum += confidence[~matches].sum().item()
+            true_positive += torch.bincount(labels[matches], minlength=10)
+            predicted_counts += torch.bincount(predictions, minlength=10)
+            actual_counts += torch.bincount(labels, minlength=10)
+    # Preserve the original loss and accuracy calculation.
     accuracy = correct / len(testloader.dataset)
     loss = loss / len(testloader)
-    return loss, accuracy
+    # Calculate precision, recall, and F1 for each class.
+    precision_per_class = true_positive.float() / predicted_counts.clamp(min=1)
+    recall_per_class = true_positive.float() / actual_counts.clamp(min=1)
+    f1_per_class = (
+        2 * precision_per_class * recall_per_class
+        / (precision_per_class + recall_per_class).clamp(min=1e-12)
+    )
+    # Return macro-averaged classification metrics and mean confidence.
+    return {
+        "eval_loss": loss,
+        "eval_acc": accuracy,
+        "eval_precision": precision_per_class.mean().item(),
+        "eval_recall": recall_per_class.mean().item(),
+        "eval_f1": f1_per_class.mean().item(),
+        "eval_confidence": confidence_sum / max(total_examples, 1),
+        "eval_correct_confidence": correct_confidence_sum / max(correct, 1),
+        "eval_wrong_confidence": wrong_confidence_sum / max(total_examples - correct, 1),
+    }
+
+
+def test(net, testloader, device):
+    """Validate the model and return loss and accuracy."""
+    metrics = test_metrics(net, testloader, device)
+    return metrics["eval_loss"], metrics["eval_acc"]
