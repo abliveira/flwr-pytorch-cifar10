@@ -1,11 +1,16 @@
-"""pytorchexample: A Flower / PyTorch app."""
+"""UCI HAR Flower server application."""
 
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
-from pytorchexample.logging_utils import LoggingFedAvg
+from uciharapp.logging_utils import LoggingFedAvg
 
-from pytorchexample.task import Net, load_centralized_dataset, test_metrics
+from uciharapp.task import (
+    Net,
+    load_centralized_dataset,
+    resolve_dataset_dir,
+    test_metrics,
+)
 
 # Create ServerApp
 app = ServerApp()
@@ -19,6 +24,8 @@ def main(grid: Grid, context: Context) -> None:
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["learning-rate"]
+    dataset_dir = str(resolve_dataset_dir(context.run_config["dataset-dir"]))
+    print(f"Using UCI HAR dataset at {dataset_dir}")
 
     # Load global model
     global_model = Net()
@@ -39,7 +46,9 @@ def main(grid: Grid, context: Context) -> None:
         initial_arrays=arrays,
         train_config=ConfigRecord({"lr": lr}),
         num_rounds=num_rounds,
-        evaluate_fn=global_evaluate,
+        evaluate_fn=lambda server_round, arrays: global_evaluate(
+            server_round, arrays, dataset_dir
+        ),
     )
 
     if context.run_config["save-model"]:
@@ -50,7 +59,9 @@ def main(grid: Grid, context: Context) -> None:
     print("\nFederated training finished.")
 
 
-def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
+def global_evaluate(
+    server_round: int, arrays: ArrayRecord, dataset_dir: str | None = None
+) -> MetricRecord:
     """Evaluate the global model and print a compact metric summary."""
 
     # Load the model and initialize it with the received weights
@@ -60,7 +71,7 @@ def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
     model.to(device)
 
     # Load the centralized dataset
-    test_dataloader = load_centralized_dataset()
+    test_dataloader = load_centralized_dataset(dataset_dir)
 
     # Evaluate the global model centrally
     metrics = test_metrics(model, test_dataloader, device)

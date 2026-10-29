@@ -1,4 +1,4 @@
-"""Custom logging utilities for a Flower / PyTorch app."""
+"""Custom logging utilities for the UCI HAR Flower app."""
 
 from flwr.serverapp.strategy import FedAvg
 

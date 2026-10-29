@@ -3,15 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "quickstart-pytorch"
+name = "quickstart-ucihar"
 version = "1.1.13"
-description = "Federated Learning with PyTorch and Flower (Quickstart Example)"
+description = "Federated Human Activity Recognition with PyTorch and Flower"
 license = {file = "LICENSE"}
 dependencies = [
     "flwr[simulation]>=1.36.0",
-    "flwr-datasets[vision]>=0.6.1",
+    "numpy",
     "torch==2.10.0",
-    "torchvision==0.25.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -23,8 +22,8 @@ fab-format-version = 1
 flwr-version-target = "1.36.0"
 
 [tool.flwr.app.components]
-serverapp = "pytorchexample.server_app:app"
-clientapp = "pytorchexample.client_app:app"
+serverapp = "uciharapp.server_app:app"
+clientapp = "uciharapp.client_app:app"
 
 [tool.flwr.app.config]
 num-server-rounds = 10
@@ -33,3 +32,4 @@ local-epochs = 2
 learning-rate = 0.003
 batch-size = 32
 save-model = true
+dataset-dir = "D:\\Data\\Engenharia\\fldemo\\quickstart-ucihar\\data\\UCI HAR Dataset"

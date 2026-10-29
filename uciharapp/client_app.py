@@ -1,12 +1,12 @@
-"""pytorchexample: A Flower / PyTorch app."""
+"""UCI HAR Flower client application."""
 
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 
-from pytorchexample.task import Net, load_data
-from pytorchexample.task import test_metrics as test_metrics_fn
-from pytorchexample.task import train as train_fn
+from uciharapp.task import Net, load_data
+from uciharapp.task import test_metrics as test_metrics_fn
+from uciharapp.task import train as train_fn
 
 # Flower ClientApp
 app = ClientApp()
@@ -26,7 +26,10 @@ def train(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    trainloader, _ = load_data(partition_id, num_partitions, batch_size)
+    dataset_dir = context.run_config["dataset-dir"]
+    trainloader, _ = load_data(
+        partition_id, num_partitions, batch_size, dataset_dir
+    )
 
     # Call the training function
     train_loss = train_fn(
@@ -62,7 +65,10 @@ def evaluate(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    _, valloader = load_data(partition_id, num_partitions, batch_size)
+    dataset_dir = context.run_config["dataset-dir"]
+    _, valloader = load_data(
+        partition_id, num_partitions, batch_size, dataset_dir
+    )
 
     # Evaluate the global model on the client's validation set.
     metrics = test_metrics_fn(model, valloader, device)
