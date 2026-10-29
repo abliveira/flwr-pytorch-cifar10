@@ -26,9 +26,9 @@ serverapp = "uciharapp.server_app:app"
 clientapp = "uciharapp.client_app:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 10
+num-server-rounds = 25
 fraction-evaluate = 1.0
-local-epochs = 2
+local-epochs = 4
 learning-rate = 0.003
 batch-size = 32
 save-model = true
