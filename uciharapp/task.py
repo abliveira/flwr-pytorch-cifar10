@@ -118,20 +118,22 @@ def load_data(
     batch_size: int,
     dataset_dir: str | Path | None = None,
 ):
-    """Load one participant's data and split it into local train/validation."""
+    """Load one participant's data per client and split it into local train/validation."""
     dataset = _load_dataset("train", dataset_dir)
     features, labels, subjects = dataset.tensors
     participant_ids = torch.unique(subjects, sorted=True)
-    if num_partitions != len(participant_ids):
+    # Allow a variable number of clients, with exactly one participant per client.
+    if not 1 <= num_partitions <= len(participant_ids):
         raise ValueError(
             f"UCI HAR has {len(participant_ids)} training participants; configure "
-            f"exactly {len(participant_ids)} Flower clients, got {num_partitions}"
+            f"between 1 and {len(participant_ids)} Flower clients, got {num_partitions}"
         )
     if not 0 <= partition_id < num_partitions:
         raise ValueError(
             f"partition_id must be in [0, {num_partitions}), got {partition_id}"
         )
 
+    # Assign one distinct participant to each client, using sorted participant IDs.
     participant_id = participant_ids[partition_id]
     partition_indices = torch.where(subjects == participant_id)[0]
     if len(partition_indices) < 2:
@@ -140,6 +142,7 @@ def load_data(
             "examples for training and validation"
         )
 
+    # Split this participant's data reproducibly into local training and validation sets.
     split_generator = torch.Generator().manual_seed(42 + partition_id)
     local_indices = partition_indices[
         torch.randperm(len(partition_indices), generator=split_generator)
